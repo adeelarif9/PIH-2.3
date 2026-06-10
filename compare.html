@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIH Nutrition — Comparer</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="nav-container"></div>
+
+<!-- DATE RANGE BAR (sticky) -->
+<div class="date-bar">
+  <div class="date-bar-inner">
+    <div class="date-quick-btns">
+      <button class="date-quick-btn" data-days="7">7 jours</button>
+      <button class="date-quick-btn" data-days="30">30 jours</button>
+      <button class="date-quick-btn" data-days="90">3 mois</button>
+      <button class="date-quick-btn" data-days="365">1 an</button>
+      <button class="date-quick-btn" data-days="all">Tout / All</button>
+    </div>
+    <div class="date-range-sep"></div>
+    <div class="date-range-inputs">
+      <input type="date" id="date-start" title="Date de début / Start date">
+      <span class="date-sep">—</span>
+      <input type="date" id="date-end" title="Date de fin / End date">
+    </div>
+    <div class="date-range-sep"></div>
+    <select id="filter-site" class="filter-select" title="Filtrer par site / Filter by site">
+      <option value="">Tous sites / All sites</option>
+    </select>
+    <select id="filter-type" class="filter-select" title="Type d'intervention">
+      <option value="">Tous types / All types</option>
+      <option value="Communautaire">Communautaire</option>
+      <option value="Institutionnel">Institutionnel</option>
+    </select>
+    <select id="filter-sex" class="filter-select" title="Sexe / Sex">
+      <option value="">Tous sexes / All</option>
+      <option value="M">Masculin / M</option>
+      <option value="F">Féminin / F</option>
+    </select>
+    <select id="filter-age" class="filter-select" title="Groupe d'âge / Age group">
+      <option value="">Tous âges / All ages</option>
+      <option value="0-5">0-5 mois</option>
+      <option value="6-11">6-11 mois</option>
+      <option value="12-23">12-23 mois</option>
+      <option value="24-59">24-59 mois</option>
+      <option value="60+">>= 60 mois</option>
+    </select>
+  </div>
+</div>
+
+<!-- NO DATA STATE -->
+<div id="no-data-banner" class="no-data-banner" style="display:none;">
+  <div style="font-size:52px;margin-bottom:16px;">📂</div>
+  <div class="no-data-title">Aucune donnée chargée / No data loaded</div>
+  <div class="no-data-desc">
+    Veuillez d'abord charger vos fichiers d'export CommCare.<br>
+    <em>Please upload your CommCare export files first.</em>
+  </div>
+  <a href="index.html" class="load-btn" style="display:inline-block;margin-top:24px;text-decoration:none;">
+    Charger les données →
+  </a>
+</div>
+
+<!-- MAIN CONTENT -->
+<div id="analytics-content" class="page active" style="display:none;">
+
+  <div class="card compare-control-card">
+    <div class="card-header-row">
+      <div>
+        <div class="card-title" style="margin-bottom:2px;">Comparaison côte à côte / Side-by-side comparison</div>
+        <div class="card-subtitle">Choisissez une variable de regroupement, puis comparez les résultats, les visites, la durée de séjour et le gain de poids.</div>
+      </div>
+      <button class="export-btn-inline" id="compare-export-btn">↓ CSV</button>
+    </div>
+    <div class="compare-controls">
+      <label class="compare-field">
+        <span>Comparer par / Compare by</span>
+        <select id="compare-dimension">
+          <option value="site">Site</option>
+          <option value="program">Programme / Program</option>
+          <option value="typeIntervention">Type d'intervention</option>
+          <option value="sex">Sexe / Sex</option>
+          <option value="ageGroup">Groupe d'âge / Age group</option>
+          <option value="siteProgram">Site + programme</option>
+          <option value="typeProgram">Type + programme</option>
+        </select>
+      </label>
+      <label class="compare-field">
+        <span>Programme / Program</span>
+        <select id="compare-program">
+          <option value="">Tous programmes / All programs</option>
+          <option value="USN">USN</option>
+          <option value="PTA">PTA</option>
+          <option value="PNS">PNS</option>
+        </select>
+      </label>
+      <label class="compare-field">
+        <span>Taille min. / Min. group size</span>
+        <select id="compare-min-n">
+          <option value="1">1 admission</option>
+          <option value="5">5 admissions</option>
+          <option value="10">10 admissions</option>
+          <option value="25">25 admissions</option>
+        </select>
+      </label>
+      <label class="compare-field">
+        <span>Trier par / Sort by</span>
+        <select id="compare-sort">
+          <option value="total">Admissions</option>
+          <option value="recoveryRate">Taux guérison</option>
+          <option value="defaultRate">Taux abandon</option>
+          <option value="avgLOS">Durée séjour moy.</option>
+          <option value="avgWeightGain">Gain poids moy.</option>
+        </select>
+      </label>
+    </div>
+  </div>
+
+  <div class="stat-grid" id="compare-stat-grid"></div>
+
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header-row" style="margin-bottom:14px;">
+      <div>
+        <div class="card-title" style="margin-bottom:2px;">Tableau comparatif / Comparison table</div>
+        <div class="card-subtitle" id="compare-summary">-</div>
+      </div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table compare-table">
+        <thead>
+          <tr>
+            <th>Groupe / Group</th>
+            <th>Adm.</th>
+            <th>Sortis</th>
+            <th>Guéri</th>
+            <th>Abandon</th>
+            <th>Taux guérison</th>
+            <th>Taux abandon</th>
+            <th>Durée séjour moy.</th>
+            <th>Visites moy.</th>
+            <th>Gain poids moy.</th>
+            <th>PNS/PTA/USN</th>
+          </tr>
+        </thead>
+        <tbody id="compare-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Taux de guérison / Recovery rate</div>
+      <div class="card-subtitle">Par groupe, parmi les patients sortis · By group, among exited patients</div>
+      <div id="compare-recovery-chart" class="compare-chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Taux d'abandon / Default rate</div>
+      <div class="card-subtitle">Signal opérationnel pour la rétention · Operational retention signal</div>
+      <div id="compare-default-chart" class="compare-chart"></div>
+    </div>
+  </div>
+
+  <div class="two-col">
+    <div class="card">
+      <div class="card-title">Durée de séjour moyenne / Avg. length of stay</div>
+      <div class="card-subtitle">Jours, pour épisodes avec données disponibles · Days, available data only</div>
+      <div id="compare-los-chart" class="compare-chart"></div>
+    </div>
+    <div class="card">
+      <div class="card-title">Gain de poids moyen / Avg. weight gain</div>
+      <div class="card-subtitle">Grammes, épisodes avec poids admission et sortie · Grams, available data only</div>
+      <div id="compare-weight-chart" class="compare-chart"></div>
+    </div>
+  </div>
+
+</div>
+
+<script src="js/storage.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/analytics.js"></script>
+<script src="js/compare.js"></script>
+<script>
+  document.getElementById('nav-container').innerHTML = buildNav('compare');
+</script>
+</body>
+</html>

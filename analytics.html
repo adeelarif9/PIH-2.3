@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PIH Nutrition — Vue d'ensemble</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<div id="nav-container"></div>
+
+<!-- DATE RANGE BAR (sticky) -->
+<div class="date-bar">
+  <div class="date-bar-inner">
+    <div class="date-quick-btns">
+      <button class="date-quick-btn" data-days="7">7 jours</button>
+      <button class="date-quick-btn" data-days="30">30 jours</button>
+      <button class="date-quick-btn" data-days="90">3 mois</button>
+      <button class="date-quick-btn" data-days="365">1 an</button>
+      <button class="date-quick-btn" data-days="all">Tout / All</button>
+    </div>
+    <div class="date-range-sep"></div>
+    <div class="date-range-inputs">
+      <input type="date" id="date-start" title="Date de début / Start date">
+      <span class="date-sep">—</span>
+      <input type="date" id="date-end" title="Date de fin / End date">
+    </div>
+    <div class="date-range-sep"></div>
+    <select id="filter-site" class="filter-select" title="Filtrer par site / Filter by site">
+      <option value="">Tous sites / All sites</option>
+    </select>
+    <select id="filter-type" class="filter-select" title="Type d'intervention">
+      <option value="">Tous types / All types</option>
+      <option value="Communautaire">Communautaire</option>
+      <option value="Institutionnel">Institutionnel</option>
+    </select>
+    <select id="filter-sex" class="filter-select" title="Sexe / Sex">
+      <option value="">Tous sexes / All</option>
+      <option value="M">Masculin / M</option>
+      <option value="F">Féminin / F</option>
+    </select>
+    <select id="filter-age" class="filter-select" title="Groupe d'âge / Age group">
+      <option value="">Tous âges / All ages</option>
+      <option value="0-5">0–5 mois</option>
+      <option value="6-11">6–11 mois</option>
+      <option value="12-23">12–23 mois</option>
+      <option value="24-59">24–59 mois</option>
+      <option value="60+">≥ 60 mois</option>
+    </select>
+    <button class="export-btn" id="report-btn" title="Télécharger le rapport / Download report">⬇ Rapport</button>
+    <button class="export-btn" id="export-btn" title="Exporter les données filtrées en CSV / Export filtered data as CSV">
+      ↓ Export CSV
+    </button>
+  </div>
+</div>
+
+<!-- NO DATA STATE -->
+<div id="no-data-banner" class="no-data-banner" style="display:none;">
+  <div style="font-size:52px;margin-bottom:16px;">📂</div>
+  <div class="no-data-title">Aucune donnée chargée / No data loaded</div>
+  <div class="no-data-desc">
+    Veuillez d'abord charger vos fichiers d'export CommCare.<br>
+    <em>Please upload your CommCare export files first.</em>
+  </div>
+  <a href="index.html" class="load-btn" style="display:inline-block;margin-top:24px;text-decoration:none;">
+    Charger les données →
+  </a>
+</div>
+
+<!-- MAIN ANALYTICS CONTENT -->
+<div id="analytics-content" class="page active" style="display:none;">
+
+  <!-- SUMMARY STAT CARDS -->
+  <div class="stat-grid" id="stat-grid" style="margin-bottom:24px;"></div>
+
+  <!-- ROW 1: OUTCOMES TABLE (full width) -->
+  <div class="card" style="margin-bottom:24px;">
+    <div class="card-header-row" style="margin-bottom:14px;">
+      <div>
+        <div class="card-title" style="margin-bottom:2px;">Résultats par programme / Outcomes by program</div>
+        <div class="card-subtitle">Toutes admissions dans la période sélectionnée · All admissions in selected period</div>
+      </div>
+      <button class="export-btn-inline" id="outcomes-export-btn">↓ CSV</button>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th>Programme</th>
+            <th>Total adm.</th>
+            <th style="color:var(--green);">Guéri</th>
+            <th style="color:var(--yellow);">Abandon</th>
+            <th style="color:var(--blue);">Transféré</th>
+            <th style="color:var(--pih-red);">Décédé</th>
+            <th>Actif</th>
+            <th>Taux guérison / Recovery rate</th>
+          </tr>
+        </thead>
+        <tbody id="outcomes-table-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ROW 2: ENROLLMENT TREND + COHORT OUTCOMES -->
+  <div class="two-col" style="margin-bottom:20px;">
+
+    <div class="card">
+      <div class="card-header-row">
+        <div>
+          <div class="card-title">Tendance des admissions / Admission trend</div>
+          <div class="card-subtitle">Nouvelles admissions par mois · New admissions by month</div>
+        </div>
+      </div>
+      <div id="enrollment-chart" style="margin-top:14px;"></div>
+      <div class="legend" style="margin-top:10px;">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--pih-red)"></div>USN</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>PTA</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>PNS</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Analyse par cohorte / Cohort analysis</div>
+      <div class="card-subtitle">Résultats par mois d'admission · Outcomes by admission month</div>
+      <div id="cohort-chart" style="margin-top:14px;"></div>
+      <div class="legend" style="margin-top:10px;">
+        <div class="legend-item"><div class="legend-dot" style="background:var(--green)"></div>Guéri / Cured</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--yellow)"></div>Abandon / Default</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div>Transféré / Transferred</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--pih-red)"></div>Décédé / Deceased</div>
+        <div class="legend-item"><div class="legend-dot" style="background:var(--gray-300)"></div>Actif / Active</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ROW 3: PROGRAMME FLOW + SUPPLEMENT GAP -->
+  <div class="two-col" style="margin-bottom:20px;">
+
+    <div class="card">
+      <div class="card-title">Origine des admissions / Admission origins</div>
+      <div class="card-subtitle">D'où viennent les enfants admis · Where admitted children come from</div>
+      <div id="flow-chart" style="margin-top:14px;"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Écart de suppléments / Supplement gap</div>
+      <div class="card-subtitle">Quantité recommandée vs livrée par mois (toutes lignes) · Recommended vs. delivered by month (all programs)</div>
+      <div style="display:flex;gap:14px;font-size:10px;color:var(--gray-400);margin-top:8px;margin-bottom:6px;">
+        <span><span style="display:inline-block;width:12px;height:8px;background:var(--gray-300);border-radius:2px;margin-right:4px;vertical-align:middle;"></span>Recommandé</span>
+        <span><span style="display:inline-block;width:12px;height:8px;background:var(--green);border-radius:2px;margin-right:4px;vertical-align:middle;opacity:0.85;"></span>Livré</span>
+      </div>
+      <div id="supp-chart"></div>
+    </div>
+
+  </div>
+
+</div>
+
+<script src="js/storage.js"></script>
+<script src="js/shared.js"></script>
+<script src="js/analytics.js"></script>
+<script>
+  document.getElementById('nav-container').innerHTML = buildNav('analytics');
+</script>
+</body>
+</html>
