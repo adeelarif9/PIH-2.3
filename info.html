@@ -227,21 +227,21 @@
       <h3>Vue d'ensemble / Overview <span class="page-tag">analytics.html</span></h3>
       <ul class="feature-list">
         <li><span class="fr">Cartes résumé</span> <span class="en">— total admissions, recovery rate, avg LOS, active cases</span></li>
-        <li><span class="fr">Résultats par programme</span> <span class="en">— outcomes table (guéri, abandon, transféré, décédé, actif) with recovery rate</span></li>
+        <li><span class="fr">Résultats par programme</span> <span class="en">— outcomes table with recovery target ≥75% and survival target ≥97%</span></li>
         <li><span class="fr">Tendance des admissions</span> <span class="en">— new admissions by month, stacked by program</span></li>
         <li><span class="fr">Analyse par cohorte</span> <span class="en">— stacked outcome bars by admission month</span></li>
         <li><span class="fr">Origine des admissions</span> <span class="en">— referral source distribution</span></li>
-        <li><span class="fr">Écart de suppléments</span> <span class="en">— recommended vs. delivered therapeutic food per month</span></li>
+        <li><span class="fr">Écart de suppléments</span> <span class="en">— patient-level supplement coverage histogram plus monthly recommended vs. delivered aggregate</span></li>
       </ul>
 
       <h3>Profils & Résultats / Profiles &amp; Outcomes <span class="page-tag">profiles.html</span></h3>
       <ul class="feature-list">
         <li><span class="fr">Performance par site</span> <span class="en">— admissions, recovery rate, default rate, avg LOS, program mix per site</span></li>
-        <li><span class="fr">Statut nutritionnel à l'admission</span> <span class="en">— P/T z-score distribution at first visit</span></li>
-        <li><span class="fr">Gain de poids à la sortie</span> <span class="en">— total weight gain (g) for cured patients, with breakdown by sex and age group</span></li>
+        <li><span class="fr">Statut nutritionnel à l'admission</span> <span class="en">— recoded CommCare P/T categories; unvalidated numeric codes are marked for review</span></li>
+        <li><span class="fr">Gain de poids à la sortie</span> <span class="en">— total weight gain (g) for all patients with known gain; cured average shown separately; monthly trend by program</span></li>
         <li><span class="fr">Profils patients — âge &amp; sexe</span> <span class="en">— age group and sex distribution</span></li>
         <li><span class="fr">Allaitement &amp; vaccination</span> <span class="en">— breastfeeding and vaccination status at registration</span></li>
-        <li><span class="fr">Durée de séjour</span> <span class="en">— LOS distribution by program; avg LOS by site when multiple sites present</span></li>
+        <li><span class="fr">Durée de séjour</span> <span class="en">— program-specific green/yellow/red LOS thresholds; avg LOS by site when multiple sites present</span></li>
         <li><span class="fr">Répartition géographique</span> <span class="en">— admissions by site</span></li>
         <li><span class="fr">Trajectoire par visite</span> <span class="en">— avg weight (kg) and MUAC (cm) by visit number per program; MUAC highlighted green ≥12.5 cm</span></li>
         <li><span class="fr">Intervalles entre visites</span> <span class="en">— histogram of inter-visit gaps in days; gaps >30j flagged in red</span></li>
@@ -249,10 +249,10 @@
 
       <h3>Parcours & Qualité / Pathways &amp; Quality <span class="page-tag">pathways.html</span></h3>
       <ul class="feature-list">
-        <li><span class="fr">Trajectoires patients</span> <span class="en">— ordered program sequence per child with final outcome, grouped by starting program</span></li>
+        <li><span class="fr">Trajectoires patients</span> <span class="en">— ordered program sequence per child with final outcome, grouped by starting program; rows expand to show child IDs</span></li>
         <li><span class="fr">Parcours de soins</span> <span class="en">— program combination bar chart</span></li>
-        <li><span class="fr">Nombre de visites avant sortie</span> <span class="en">— visit count distribution by program</span></li>
-        <li><span class="fr">Qualité des données</span> <span class="en">— missing values, implausible values, LOS outliers, visit count >12, cases past target LOS with no discharge</span></li>
+        <li><span class="fr">Nombre de visites avant sortie</span> <span class="en">— visit count distribution by program; 1-2 visit discharges flagged</span></li>
+        <li><span class="fr">Qualité des données</span> <span class="en">— missing values, implausible values, LOS alerts, visit count >12, cases past target LOS with no discharge</span></li>
       </ul>
     </div>
 
@@ -272,9 +272,9 @@
     <div class="card info-section">
       <h2>Programmes / Programs</h2>
       <ul class="feature-list">
-        <li><span class="prog-pill usn">USN</span> <span class="fr">Unité de Stabilisation Nutritionnelle</span> <span class="en">— inpatient SAM; always institutional; LOS target ≤21 days</span></li>
-        <li><span class="prog-pill pta">PTA</span> <span class="fr">Programme de Traitement Ambulatoire</span> <span class="en">— outpatient SAM; LOS target ≤84 days</span></li>
-        <li><span class="prog-pill pns">PNS</span> <span class="fr">Programme Nutritionnel Supplémentaire</span> <span class="en">— MAM / preventive; LOS target ≤112 days</span></li>
+        <li><span class="prog-pill usn">USN</span> <span class="fr">Unité de Stabilisation Nutritionnelle</span> <span class="en">— inpatient SAM; LOS bands: green &lt;14d, yellow 14-45d, red &gt;45d</span></li>
+        <li><span class="prog-pill pta">PTA</span> <span class="fr">Programme de Traitement Ambulatoire</span> <span class="en">— outpatient SAM; LOS bands: green &lt;6wk, yellow 6-8wk, red &gt;8wk</span></li>
+        <li><span class="prog-pill pns">PNS</span> <span class="fr">Programme Nutritionnel Supplémentaire</span> <span class="en">— MAM / preventive; LOS bands: green &lt;8wk, yellow 8-12wk, red &gt;12wk</span></li>
       </ul>
     </div>
 
@@ -296,6 +296,26 @@
       <h2>Historique des modifications / Change history</h2>
 
       <div class="changelog">
+
+        <!-- v2.3.1 -->
+        <div class="cl-entry">
+          <div class="cl-dot"></div>
+          <div class="cl-header">
+            <span class="cl-version">v2.3.1</span>
+            <span class="cl-date">2026-06-10</span>
+            <span class="cl-source">staff notes · supplement coverage, thresholds, pathways</span>
+          </div>
+          <ul class="cl-items">
+            <li><span class="label">Couverture suppléments / Supplement coverage</span> <span class="detail">— added patient-level histogram using each patient's delivered/recommended percentage; &lt;50% red, 50-75% orange, &gt;75% green; retained monthly aggregate view</span></li>
+            <li><span class="label">Résultats par programme / Outcomes by program</span> <span class="detail">— added threshold labels for recovery ≥75% and survival ≥97% / mortality ≤3%</span></li>
+            <li><span class="label">Durée de séjour / Length of stay</span> <span class="detail">— replaced generic LOS buckets with PNS, PTA, and USN-specific green/yellow/red thresholds</span></li>
+            <li><span class="label">Statut nutritionnel / Nutritional status</span> <span class="detail">— recoded confirmed CommCare P/T label 4 to &lt; -1 ET and marked unvalidated numeric codes for review</span></li>
+            <li><span class="label">Gain de poids / Weight gain</span> <span class="detail">— distribution now includes all patients with known gain; cured-patient average remains visible; monthly trend by program added</span></li>
+            <li><span class="label">Trajectoires / Pathways</span> <span class="detail">— trajectory rows can be clicked to show child IDs; abnormal USN/PNS sequence patterns are flagged for investigation</span></li>
+            <li><span class="label">Visites avant sortie / Visits before discharge</span> <span class="detail">— one-visit and two-visit discharges are now separated and flagged in red</span></li>
+            <li><span class="label">Documentation</span> <span class="detail">— implementation notes added in docs/version-2.3.1-changes.md</span></li>
+          </ul>
+        </div>
 
         <!-- v2.3 -->
         <div class="cl-entry">

@@ -108,6 +108,60 @@ function noDataHtml(msg) {
   return `<div style="padding:24px;text-align:center;font-size:13px;color:var(--gray-400);">${msg || 'Aucune donnée / No data'}</div>`;
 }
 
+function pct(n, d) {
+  return d > 0 ? Math.round(n / d * 100) : null;
+}
+
+function avg(vals) {
+  return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+}
+
+function fmtPct(val) {
+  return val === null || val === undefined ? '—' : `${Math.round(val)}%`;
+}
+
+function fmtNum(val, suffix) {
+  return val === null || val === undefined ? '—' : `${Math.round(val)}${suffix || ''}`;
+}
+
+function coverageColor(rate) {
+  if (rate === null || rate === undefined) return 'var(--gray-300)';
+  if (rate < 50) return 'var(--pih-red)';
+  if (rate <= 75) return 'var(--yellow)';
+  return 'var(--green)';
+}
+
+function losStatus(program, days) {
+  if (days === null || days === undefined) return { label: '—', color: 'var(--gray-300)', severity: 'missing' };
+  const rules = {
+    PNS: [
+      { max: 55, label: '<8 sem. / <8 wk', color: 'var(--green)', severity: 'ok' },
+      { max: 84, label: '8-12 sem. / 8-12 wk', color: 'var(--yellow)', severity: 'watch' },
+      { max: Infinity, label: '>12 sem. / >12 wk', color: 'var(--pih-red)', severity: 'flag' },
+    ],
+    PTA: [
+      { max: 41, label: '<6 sem. / <6 wk', color: 'var(--green)', severity: 'ok' },
+      { max: 56, label: '6-8 sem. / 6-8 wk', color: 'var(--yellow)', severity: 'watch' },
+      { max: Infinity, label: '>8 sem. / >8 wk', color: 'var(--pih-red)', severity: 'flag' },
+    ],
+    USN: [
+      { max: 13, label: '<14 j / <14 d', color: 'var(--green)', severity: 'ok' },
+      { max: 45, label: '14-45 j / 14-45 d', color: 'var(--yellow)', severity: 'watch' },
+      { max: Infinity, label: '>45 j / >45 d', color: 'var(--pih-red)', severity: 'flag' },
+    ],
+  };
+  const rule = (rules[program] || []).find(r => days <= r.max);
+  return rule || { label: '—', color: 'var(--gray-300)', severity: 'missing' };
+}
+
+function isAbnormalPath(pathStr) {
+  return [
+    'PTA→USN→PNS',
+    'USN→PNS',
+    'USN→PNS→PTA',
+  ].some(prefix => pathStr === prefix || pathStr.startsWith(prefix + '→'));
+}
+
 // ── SUMMARY STATS ──
 
 function renderSummaryStats(episodes) {
@@ -235,7 +289,7 @@ function renderCohortOutcomes(episodes) {
 
 // ── PROGRAMME FLOW (ORIGINE) ──
 
-const LOS_TARGETS = { USN: 21, PTA: 84, PNS: 112 };
+const LOS_TARGETS = { USN: 45, PTA: 56, PNS: 84 };
 
 const ORIGINE_LABELS = {
   'NC':     'NC — Nouveau cas / New case',
@@ -281,11 +335,73 @@ function renderProgramFlow(episodes) {
 
 // ── SUPPLEMENT GAP ──
 
-function renderSuppGap(suppMonthly, range) {
+function renderSuppGap(suppMonthly, range, episodes) {
   const el = document.getElementById('supp-chart');
   if (!el) return;
 
-  let rows = suppMonthly;
+  const coverageRows = (episodes || [])
+    .filter(ep => ep.suppRec && ep.suppRec > 0)
+    .map(ep => ({
+      caseId: ep.caseId,
+      program: ep.program,
+      site: ep.site,
+      rec: ep.suppRec,
+      del: ep.suppDel || 0,
+      rate: Math.max(0, Math.round((ep.suppDel || 0) / ep.suppRec * 100)),
+    }));
+
+  const bins = [
+    { label: '<50%', min: 0, max: 49 },
+    { label: '50-75%', min: 50, max: 75 },
+    { label: '76-99%', min: 76, max: 99 },
+    { label: '100%', min: 100, max: 100 },
+    { label: '>100%', min: 101, max: Infinity },
+  ];
+  const binRows = bins.map(b => ({
+    ...b,
+    count: coverageRows.filter(r => r.rate >= b.min && r.rate <= b.max).length,
+    color: b.min < 50 ? 'var(--pih-red)' : b.min <= 75 ? 'var(--yellow)' : 'var(--green)',
+  }));
+  const maxBin = Math.max(...binRows.map(b => b.count), 1);
+  const avgCoverage = avg(coverageRows.map(r => r.rate));
+  const underFull = coverageRows.filter(r => r.rate < 100).length;
+  const full = coverageRows.filter(r => r.rate === 100).length;
+
+  const histogramHtml = coverageRows.length === 0
+    ? noDataHtml('Aucune donnée patient de couverture supplementaire / No patient supplement coverage data')
+    : `
+      <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;">
+        <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Couverture moy.</div>
+          <div style="font-size:20px;font-weight:800;color:${coverageColor(avgCoverage)};">${fmtPct(avgCoverage)}</div>
+        </div>
+        <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">100%</div>
+          <div style="font-size:20px;font-weight:800;color:var(--green);">${full}</div>
+        </div>
+        <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+          <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Sous 100%</div>
+          <div style="font-size:20px;font-weight:800;color:${underFull ? 'var(--yellow)' : 'var(--green)'};">${underFull}</div>
+        </div>
+      </div>
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:7px;">
+        Histogramme patient · Patient coverage histogram
+      </div>
+      ${binRows.map(b => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:58px;font-size:11px;color:var(--gray-500);text-align:right;">${b.label}</div>
+          <div style="flex:1;background:var(--gray-100);border-radius:3px;height:18px;overflow:hidden;">
+            <div style="width:${b.count/maxBin*100}%;height:100%;background:${b.color};opacity:0.86;border-radius:3px;"></div>
+          </div>
+          <div style="width:32px;font-size:12px;font-weight:700;color:var(--gray-700);text-align:right;">${b.count}</div>
+        </div>`).join('')}
+      <div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:8px;font-size:10px;color:var(--gray-500);">
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--pih-red);border-radius:2px;margin-right:4px;"></span>&lt;50%</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--yellow);border-radius:2px;margin-right:4px;"></span>50-75%</span>
+        <span><span style="display:inline-block;width:10px;height:10px;background:var(--green);border-radius:2px;margin-right:4px;"></span>&gt;75%</span>
+      </div>`;
+
+  let rows = suppMonthly || [];
   if (range.start) {
     const mk = range.start.toISOString().slice(0, 7);
     rows = rows.filter(r => r.month >= mk);
@@ -304,14 +420,17 @@ function renderSuppGap(suppMonthly, range) {
   }
 
   const months = Object.keys(byMonth).sort();
-  if (months.length === 0) { el.innerHTML = noDataHtml('Aucune donnée de suppléments / No supplement data'); return; }
+  if (months.length === 0) {
+    el.innerHTML = histogramHtml;
+    return;
+  }
 
   const maxVal = Math.max(...months.map(m => byMonth[m].rec), 1);
 
-  el.innerHTML = months.map(m => {
+  const monthlyHtml = months.map(m => {
     const { rec, del } = byMonth[m];
     const rate = rec > 0 ? Math.round(del / rec * 100) : null;
-    const rateColor = rate === null ? 'var(--gray-400)' : rate >= 90 ? 'var(--green)' : rate >= 70 ? 'var(--yellow)' : 'var(--pih-red)';
+    const rateColor = coverageColor(rate);
     return `
       <div style="margin-bottom:11px;">
         <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--gray-500);margin-bottom:3px;">
@@ -328,6 +447,15 @@ function renderSuppGap(suppMonthly, range) {
         </div>
       </div>`;
   }).join('');
+
+  el.innerHTML = `
+    ${histogramHtml}
+    <div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--gray-100);">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:7px;">
+        Couverture mensuelle agrégée · Monthly aggregate coverage
+      </div>
+      ${monthlyHtml}
+    </div>`;
 }
 
 // ── LENGTH OF STAY ──
@@ -336,15 +464,6 @@ function renderLOS(episodes) {
   const el = document.getElementById('los-chart');
   if (!el) return;
 
-  const buckets = [
-    { label: '< 2 sem.',  min: 0,   max: 13  },
-    { label: '2–4 sem.',  min: 14,  max: 27  },
-    { label: '1–2 mois',  min: 28,  max: 59  },
-    { label: '2–4 mois',  min: 60,  max: 119 },
-    { label: '> 4 mois',  min: 120, max: 9999 },
-  ];
-  const colors = { USN: 'var(--pih-red)', PTA: 'var(--blue)', PNS: 'var(--green)' };
-
   const withLOS = episodes.filter(e => e.losdays !== null);
   if (withLOS.length === 0) { el.innerHTML = noDataHtml('Aucune donnée de durée de séjour / No length-of-stay data'); return; }
 
@@ -352,22 +471,32 @@ function renderLOS(episodes) {
   for (const prog of ['USN', 'PTA', 'PNS']) {
     const ep = withLOS.filter(e => e.program === prog);
     if (ep.length === 0) continue;
-    const maxCount = Math.max(...buckets.map(b =>
-      ep.filter(e => e.losdays >= b.min && e.losdays <= b.max).length
+    const buckets = [
+      ...new Map(ep.map(e => [losStatus(prog, e.losdays).label, losStatus(prog, e.losdays)])).values(),
+    ];
+    const orderedBuckets = {
+      USN: ['<14 j / <14 d', '14-45 j / 14-45 d', '>45 j / >45 d'],
+      PTA: ['<6 sem. / <6 wk', '6-8 sem. / 6-8 wk', '>8 sem. / >8 wk'],
+      PNS: ['<8 sem. / <8 wk', '8-12 sem. / 8-12 wk', '>12 sem. / >12 wk'],
+    }[prog].map(label => buckets.find(b => b.label === label) || { label, color: 'var(--gray-200)' });
+    const maxCount = Math.max(...orderedBuckets.map(b =>
+      ep.filter(e => losStatus(prog, e.losdays).label === b.label).length
     ), 1);
+    const flagCount = ep.filter(e => losStatus(prog, e.losdays).severity === 'flag').length;
     html += `
       <div style="margin-bottom:14px;">
         <div style="font-size:11px;font-weight:700;color:var(--gray-500);letter-spacing:0.06em;
                     text-transform:uppercase;margin-bottom:6px;">${prog}
           <span style="font-weight:400;color:var(--gray-400);">(${ep.length} patients)</span>
+          ${flagCount ? `<span style="margin-left:8px;color:var(--pih-red);font-size:10px;font-weight:800;">${flagCount} alerte LOS</span>` : ''}
         </div>
-        ${buckets.map(b => {
-          const count = ep.filter(e => e.losdays >= b.min && e.losdays <= b.max).length;
+        ${orderedBuckets.map(b => {
+          const count = ep.filter(e => losStatus(prog, e.losdays).label === b.label).length;
           return `
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-              <div style="width:52px;font-size:10px;color:var(--gray-400);text-align:right;">${b.label}</div>
+              <div style="width:92px;font-size:10px;color:var(--gray-400);text-align:right;">${b.label}</div>
               <div style="flex:1;background:var(--gray-100);border-radius:2px;height:14px;overflow:hidden;">
-                <div style="width:${count/maxCount*100}%;height:100%;background:${colors[prog]};opacity:0.8;border-radius:2px;"></div>
+                <div style="width:${count/maxCount*100}%;height:100%;background:${b.color};opacity:0.86;border-radius:2px;"></div>
               </div>
               <div style="width:22px;font-size:11px;font-weight:700;color:var(--gray-600);text-align:right;">${count}</div>
             </div>`;
@@ -448,11 +577,13 @@ function renderOutcomesTable(episodes) {
     for (const o of outcomes) counts[o] = ep.filter(e => e.outcome === o).length;
     const active       = ep.filter(e => e.outcome === null).length;
     const recoveryRate = exited.length > 0 ? Math.round(counts['Guéri'] / exited.length * 100) : null;
-    return { prog, total: ep.length, exited: exited.length, active, counts, recoveryRate };
+    const mortalityRate = exited.length > 0 ? Math.round(counts['Décédé'] / exited.length * 100) : null;
+    const survivalRate = mortalityRate !== null ? 100 - mortalityRate : null;
+    return { prog, total: ep.length, exited: exited.length, active, counts, recoveryRate, mortalityRate, survivalRate };
   }).filter(r => r.total > 0);
 
   if (rows.length === 0) {
-    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;color:var(--gray-400);padding:20px;">
+    tbody.innerHTML = `<tr><td colspan="9" style="text-align:center;color:var(--gray-400);padding:20px;">
       Aucune donnée / No data</td></tr>`;
     return;
   }
@@ -477,6 +608,24 @@ function renderOutcomesTable(episodes) {
             ${r.recoveryRate !== null ? r.recoveryRate + '%' : '—'}
           </span>
         </div>
+        ${r.recoveryRate !== null
+          ? `<div style="font-size:10px;color:${r.recoveryRate >= 75 ? 'var(--green)' : 'var(--pih-red)'};font-weight:700;margin-top:3px;">
+              ${r.recoveryRate >= 75 ? 'Acceptable >=75%' : 'Sous cible <75%'}
+            </div>`
+          : ''}
+      </td>
+      <td style="min-width:110px;">
+        <div style="font-size:12px;font-weight:800;color:${r.survivalRate !== null && r.survivalRate >= 97 ? 'var(--green)' : 'var(--pih-red)'};">
+          ${r.survivalRate !== null ? r.survivalRate + '%' : '—'}
+        </div>
+        <div style="font-size:10px;color:var(--gray-400);">
+          Mortalité ${r.mortalityRate !== null ? r.mortalityRate + '%' : '—'}
+        </div>
+        ${r.survivalRate !== null
+          ? `<div style="font-size:10px;color:${r.survivalRate >= 97 ? 'var(--green)' : 'var(--pih-red)'};font-weight:700;">
+              ${r.survivalRate >= 97 ? 'Acceptable >=97%' : 'Alerte <97%'}
+            </div>`
+          : ''}
       </td>
     </tr>
   `).join('');
@@ -494,14 +643,31 @@ const PT_SEVERITY_ORDER = [
   '> -4 ET', '> -3 ET', '> -2 ET', '> -1 ET', '> Médiane',
 ];
 
+function normalizePTLabel(raw) {
+  if (!raw) return null;
+  const s = String(raw).trim();
+  const compact = s.toLowerCase().replace(/\s+/g, ' ');
+  const numericMap = {
+    // Confirmed in staff notes: CommCare raw label 4 means below -1 standard deviation.
+    '4': '< -1 ET',
+  };
+  if (numericMap[compact]) return numericMap[compact];
+  if (/^\d+$/.test(compact)) return `Code ${compact} - définition à valider`;
+  return s
+    .replace(/standard deviation/gi, 'ET')
+    .replace(/ecart type/gi, 'ET')
+    .replace(/écart type/gi, 'ET');
+}
+
 function renderPTChart(episodes) {
   const el = document.getElementById('pt-chart');
   if (!el) return;
 
   const counts = {};
   for (const ep of episodes) {
-    if (!ep.admPT) continue;
-    counts[ep.admPT] = (counts[ep.admPT] || 0) + 1;
+    const label = normalizePTLabel(ep.admPT);
+    if (!label) continue;
+    counts[label] = (counts[label] || 0) + 1;
   }
 
   // Sort: known severity order first, then unknown values by count
@@ -521,7 +687,19 @@ function renderPTChart(episodes) {
   }));
 
   if (data.length === 0) { el.innerHTML = noDataHtml('Données P/T non disponibles / P/T data not available'); return; }
-  renderBarChart('pt-chart', data);
+  const max = Math.max(...data.map(d => d.value), 1);
+  el.innerHTML = `
+    <div style="font-size:11px;color:var(--gray-500);line-height:1.45;margin-bottom:10px;">
+      Catégories recodées à partir des libellés CommCare disponibles. Les codes numériques non confirmés restent marqués comme à valider.
+    </div>
+    ${data.map(d => `
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+        <div style="width:132px;font-size:11px;color:var(--gray-500);text-align:right;">${d.label}</div>
+        <div style="flex:1;background:var(--gray-100);border-radius:3px;height:18px;overflow:hidden;">
+          <div style="width:${d.value/max*100}%;height:100%;background:${d.color};opacity:0.86;border-radius:3px;"></div>
+        </div>
+        <div style="width:32px;font-size:12px;font-weight:700;color:var(--gray-700);text-align:right;">${d.value}</div>
+      </div>`).join('')}`;
 }
 
 // ── WEIGHT GAIN DISTRIBUTION ──
@@ -530,8 +708,9 @@ function renderWeightGainChart(episodes) {
   const el = document.getElementById('wg-chart');
   if (!el) return;
 
-  const cured = episodes.filter(e => e.outcome === 'Guéri' && e.weightGainG !== null);
-  if (cured.length === 0) { el.innerHTML = noDataHtml('Données de gain de poids non disponibles / Weight gain data not available'); return; }
+  const withGain = episodes.filter(e => e.weightGainG !== null);
+  const cured = withGain.filter(e => e.outcome === 'Guéri');
+  if (withGain.length === 0) { el.innerHTML = noDataHtml('Données de gain de poids non disponibles / Weight gain data not available'); return; }
 
   const buckets = [
     { label: '< 0 g',       min: -99999, max: -1    },
@@ -543,11 +722,33 @@ function renderWeightGainChart(episodes) {
   ];
 
   const maxCount = Math.max(...buckets.map(b =>
-    cured.filter(e => e.weightGainG >= b.min && e.weightGainG <= b.max).length
+    withGain.filter(e => e.weightGainG >= b.min && e.weightGainG <= b.max).length
   ), 1);
 
+  const avgAllGain = avg(withGain.map(e => e.weightGainG));
+  const avgCuredGain = avg(cured.map(e => e.weightGainG));
+
+  const summaryHtml = `
+    <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:12px;">
+      <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Tous patients</div>
+        <div style="font-size:20px;font-weight:800;color:var(--gray-800);">${fmtNum(avgAllGain, 'g')}</div>
+        <div style="font-size:10px;color:var(--gray-400);">n=${withGain.length}</div>
+      </div>
+      <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Guéris</div>
+        <div style="font-size:20px;font-weight:800;color:var(--green);">${fmtNum(avgCuredGain, 'g')}</div>
+        <div style="font-size:10px;color:var(--gray-400);">n=${cured.length}</div>
+      </div>
+      <div style="background:var(--gray-50);border-radius:6px;padding:8px;">
+        <div style="font-size:10px;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;">Non guéris/actifs</div>
+        <div style="font-size:20px;font-weight:800;color:var(--yellow);">${withGain.length - cured.length}</div>
+        <div style="font-size:10px;color:var(--gray-400);">avec gain connu</div>
+      </div>
+    </div>`;
+
   const distHtml = buckets.map(b => {
-    const count = cured.filter(e => e.weightGainG >= b.min && e.weightGainG <= b.max).length;
+    const count = withGain.filter(e => e.weightGainG >= b.min && e.weightGainG <= b.max).length;
     return `
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
         <div style="width:70px;font-size:11px;color:var(--gray-500);text-align:right;">${b.label}</div>
@@ -563,10 +764,10 @@ function renderWeightGainChart(episodes) {
     { key: 'M', label: 'M', color: 'var(--blue)' },
     { key: 'F', label: 'F', color: 'var(--pih-red)' },
   ].map(g => {
-    const ep = cured.filter(e => e.sex === g.key);
+    const ep = withGain.filter(e => e.sex === g.key);
     if (!ep.length) return '';
     const avg = Math.round(ep.reduce((s, e) => s + e.weightGainG, 0) / ep.length);
-    const maxG = Math.max(...cured.map(e => e.weightGainG), 1);
+    const maxG = Math.max(...withGain.map(e => e.weightGainG), 1);
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
       <div style="width:14px;font-size:11px;font-weight:700;color:${g.color};text-align:right;">${g.label}</div>
       <div style="flex:1;background:var(--gray-100);border-radius:2px;height:14px;overflow:hidden;">
@@ -578,12 +779,12 @@ function renderWeightGainChart(episodes) {
 
   // Breakdown by age group
   const maxAvgAge = Math.max(...AGE_GROUPS.map(g => {
-    const ep = cured.filter(e => e.ageMonths !== null && e.ageMonths >= g.min && e.ageMonths <= g.max);
+    const ep = withGain.filter(e => e.ageMonths !== null && e.ageMonths >= g.min && e.ageMonths <= g.max);
     return ep.length ? ep.reduce((s, e) => s + e.weightGainG, 0) / ep.length : 0;
   }), 1);
 
   const ageRows = AGE_GROUPS.map(g => {
-    const ep = cured.filter(e => e.ageMonths !== null && e.ageMonths >= g.min && e.ageMonths <= g.max);
+    const ep = withGain.filter(e => e.ageMonths !== null && e.ageMonths >= g.min && e.ageMonths <= g.max);
     if (!ep.length) return '';
     const avg = Math.round(ep.reduce((s, e) => s + e.weightGainG, 0) / ep.length);
     return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
@@ -601,7 +802,35 @@ function renderWeightGainChart(episodes) {
       ${ageRows ? `<div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.07em;margin:10px 0 6px;">Gain moy. par âge · Avg gain by age</div>${ageRows}` : ''}
     </div>` : '';
 
-  el.innerHTML = distHtml + breakdownHtml;
+  const monthly = {};
+  for (const ep of withGain) {
+    const mk = ep.exitDate ? ep.exitDate.slice(0, 7) : ep.admDate ? ep.admDate.slice(0, 7) : null;
+    if (!mk) continue;
+    if (!monthly[mk]) monthly[mk] = { PNS: [], PTA: [], USN: [] };
+    monthly[mk][ep.program].push(ep.weightGainG);
+  }
+  const months = Object.keys(monthly).sort();
+  const programColors = { PNS: 'var(--green)', PTA: 'var(--blue)', USN: 'var(--pih-red)' };
+  const monthAvgs = months.flatMap(m => ['PNS', 'PTA', 'USN'].map(p => avg(monthly[m][p])).filter(v => v !== null));
+  const maxMonthly = Math.max(...monthAvgs.map(v => Math.max(v, 0)), 1);
+  const monthlyHtml = months.length ? `
+    <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--gray-100);">
+      <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.07em;margin-bottom:7px;">
+        Gain moyen par mois · Monthly avg gain
+      </div>
+      ${months.map(m => `
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+          <div style="width:48px;font-size:10px;color:var(--gray-400);text-align:right;">${fmtMonth(m)}</div>
+          <div style="flex:1;display:flex;gap:3px;align-items:end;height:24px;background:var(--gray-50);border-radius:3px;padding:3px;">
+            ${['USN','PTA','PNS'].map(p => {
+              const v = avg(monthly[m][p]);
+              return `<div title="${p}: ${fmtNum(v, 'g')}" style="flex:1;height:${v !== null ? Math.max(2, Math.max(v, 0)/maxMonthly*100) : 0}%;background:${programColors[p]};opacity:0.82;border-radius:2px;"></div>`;
+            }).join('')}
+          </div>
+        </div>`).join('')}
+    </div>` : '';
+
+  el.innerHTML = summaryHtml + distHtml + breakdownHtml + monthlyHtml;
 }
 
 // ── PATIENT PROFILES ──
@@ -861,11 +1090,12 @@ function renderCarePathway(cases, filters) {
   if (visitsEl) {
     const progColors = { USN: 'var(--pih-red)', PTA: 'var(--blue)', PNS: 'var(--green)' };
     const buckets = [
-      { label: '1',    min: 1, max: 1  },
-      { label: '2–3',  min: 2, max: 3  },
-      { label: '4–6',  min: 4, max: 6  },
-      { label: '7–10', min: 7, max: 10 },
-      { label: '>10',  min: 11, max: 9999 },
+      { label: '1',    min: 1, max: 1, flag: true  },
+      { label: '2',    min: 2, max: 2, flag: true  },
+      { label: '3',    min: 3, max: 3, flag: false },
+      { label: '4–6',  min: 4, max: 6, flag: false },
+      { label: '7–10', min: 7, max: 10, flag: false },
+      { label: '>10',  min: 11, max: 9999, flag: false },
     ];
 
     let html = '';
@@ -873,20 +1103,23 @@ function renderCarePathway(cases, filters) {
       const ep = filteredCases.filter(c => c[prog.toLowerCase()]).map(c => c[prog.toLowerCase()].visitCount || 0);
       if (ep.length === 0) continue;
       const maxCount = Math.max(...buckets.map(b => ep.filter(v => v >= b.min && v <= b.max).length), 1);
+      const shortDischargeCount = ep.filter(v => v === 1 || v === 2).length;
       html += `
         <div style="margin-bottom:14px;">
           <div style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">
             ${prog} <span style="font-weight:400;color:var(--gray-400);">(${ep.length})</span>
+            ${shortDischargeCount ? `<span style="margin-left:8px;color:var(--pih-red);font-size:10px;font-weight:800;">${shortDischargeCount} avec 1-2 visites</span>` : ''}
           </div>
           ${buckets.map(b => {
             const count = ep.filter(v => v >= b.min && v <= b.max).length;
+            const color = b.flag && count > 0 ? 'var(--pih-red)' : progColors[prog];
             return `
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
                 <div style="width:36px;font-size:10px;color:var(--gray-400);text-align:right;">${b.label}</div>
                 <div style="flex:1;background:var(--gray-100);border-radius:2px;height:14px;overflow:hidden;">
-                  <div style="width:${count/maxCount*100}%;height:100%;background:${progColors[prog]};opacity:0.8;border-radius:2px;"></div>
+                  <div style="width:${count/maxCount*100}%;height:100%;background:${color};opacity:0.8;border-radius:2px;"></div>
                 </div>
-                <div style="width:22px;font-size:11px;font-weight:700;color:var(--gray-600);text-align:right;">${count}</div>
+                <div style="width:22px;font-size:11px;font-weight:700;color:${b.flag && count > 0 ? 'var(--pih-red)' : 'var(--gray-600)'};text-align:right;">${count}</div>
               </div>`;
           }).join('')}
         </div>`;
@@ -926,6 +1159,7 @@ function renderTrajectoryFlow(cases, filters) {
   });
 
   const trajCounts = {};
+  const trajCases = {};
   for (const c of filteredCases) {
     const eps = [];
     for (const prog of ['pns','pta','usn']) {
@@ -938,6 +1172,8 @@ function renderTrajectoryFlow(cases, filters) {
     const terminal = eps[eps.length - 1].outcome || 'Actif';
     const pathKey  = eps.map(e => e.prog).join('→') + '|' + terminal;
     trajCounts[pathKey] = (trajCounts[pathKey] || 0) + 1;
+    if (!trajCases[pathKey]) trajCases[pathKey] = [];
+    trajCases[pathKey].push(c.id || 'ID manquant');
   }
 
   const total = Object.values(trajCounts).reduce((s, v) => s + v, 0);
@@ -968,23 +1204,36 @@ function renderTrajectoryFlow(cases, filters) {
     const barW   = Math.round(count / maxCount * 100);
     const oc     = outColor[terminal] || '#6b7280';
     const ob     = outBg[terminal]    || 'rgba(107,114,128,0.10)';
+    const abnormal = isAbnormalPath(pathStr);
+    const ids = (trajCases[key] || []).slice().sort();
+    const rowId = `traj-${pathStr}-${terminal}`.replace(/[^a-zA-Z0-9_-]/g, '-');
     const pathHtml = progs.map((p, i) =>
       (i > 0 ? `<span style="color:var(--gray-300);font-size:13px;margin:0 2px;line-height:1;flex-shrink:0;">›</span>` : '') + node(p)
     ).join('');
     const outcomeHtml = `<span style="background:${ob};color:${oc};border:1.5px solid ${oc}55;font-size:10px;font-weight:700;padding:3px 8px;border-radius:10px;white-space:nowrap;">${terminal}</span>`;
     return `
-      <div style="display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;margin-bottom:2px;"
-           onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='transparent'">
-        <div style="min-width:240px;display:flex;align-items:center;flex-wrap:nowrap;gap:2px;">
-          ${pathHtml}
-          <span style="color:var(--gray-300);font-size:13px;margin:0 4px;line-height:1;flex-shrink:0;">→</span>
-          ${outcomeHtml}
-        </div>
-        <div style="flex:1;background:var(--gray-100);border-radius:4px;height:14px;overflow:hidden;min-width:60px;">
-          <div style="width:${barW}%;height:100%;background:${oc};opacity:0.45;border-radius:4px;"></div>
-        </div>
-        <div style="font-size:12px;font-weight:700;color:var(--gray-700);white-space:nowrap;min-width:80px;text-align:right;">
-          ${count.toLocaleString()} <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(${pct}%)</span>
+      <div style="margin-bottom:2px;">
+        <button type="button" data-target="${rowId}" class="trajectory-toggle"
+                style="width:100%;border:0;background:transparent;display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;text-align:left;cursor:pointer;"
+                onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='transparent'">
+          <div style="min-width:270px;display:flex;align-items:center;flex-wrap:nowrap;gap:2px;">
+            ${pathHtml}
+            <span style="color:var(--gray-300);font-size:13px;margin:0 4px;line-height:1;flex-shrink:0;">→</span>
+            ${outcomeHtml}
+            ${abnormal ? `<span style="margin-left:6px;color:var(--pih-red);font-size:10px;font-weight:800;white-space:nowrap;">A verifier</span>` : ''}
+          </div>
+          <div style="flex:1;background:var(--gray-100);border-radius:4px;height:14px;overflow:hidden;min-width:60px;">
+            <div style="width:${barW}%;height:100%;background:${abnormal ? 'var(--pih-red)' : oc};opacity:0.45;border-radius:4px;"></div>
+          </div>
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);white-space:nowrap;min-width:80px;text-align:right;">
+            ${count.toLocaleString()} <span style="font-weight:400;color:var(--gray-400);font-size:11px;">(${pct}%)</span>
+          </div>
+        </button>
+        <div id="${rowId}" style="display:none;margin:0 10px 6px 280px;padding:8px 10px;background:var(--gray-50);border-radius:6px;border-left:3px solid ${abnormal ? 'var(--pih-red)' : 'var(--gray-200)'};">
+          <div style="font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:5px;">IDs enfants / Child IDs</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            ${ids.map(id => `<span style="font-family:var(--mono);font-size:10px;color:var(--gray-700);background:white;border:1px solid var(--gray-200);border-radius:4px;padding:3px 5px;">${id}</span>`).join('')}
+          </div>
         </div>
       </div>`;
   }
@@ -1023,6 +1272,12 @@ function renderTrajectoryFlow(cases, filters) {
   }
 
   el.innerHTML = html;
+  el.querySelectorAll('.trajectory-toggle').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const target = document.getElementById(btn.dataset.target);
+      if (target) target.style.display = target.style.display === 'none' ? 'block' : 'none';
+    });
+  });
 }
 
 // ── DATA QUALITY ──
@@ -1052,7 +1307,7 @@ function renderDataQuality(dqReport, episodes) {
   const implausibleWtTotal = (dqReport.implausibleWeight.PNS || 0) + (dqReport.implausibleWeight.PTA || 0) + (dqReport.implausibleWeight.USN || 0);
   const implausibleMUACTotal = (dqReport.implausibleMUAC.PNS || 0) + (dqReport.implausibleMUAC.PTA || 0) + (dqReport.implausibleMUAC.USN || 0);
 
-  const losOutliers = episodes.filter(ep => ep.losdays !== null && LOS_TARGETS[ep.program] && ep.losdays > LOS_TARGETS[ep.program]);
+  const losOutliers = episodes.filter(ep => ep.losdays !== null && losStatus(ep.program, ep.losdays).severity === 'flag');
   const visitOutliers = episodes.filter(ep => (ep.visitCount || 0) > 12);
 
   // Active cases overdue for discharge (still enrolled but past target LOS)
@@ -1073,7 +1328,7 @@ function renderDataQuality(dqReport, episodes) {
       ${dqCard('Date d\'admission manquante', 'Missing admission date', missingAdmTotal, n, false)}
       ${dqCard('Poids aberrant', 'Implausible weight (< 0.5 or > 50 kg)', implausibleWtTotal, n, false)}
       ${dqCard('PB / MUAC aberrant', 'Implausible MUAC (< 5 or > 30 cm)', implausibleMUACTotal, n, false)}
-      ${dqCard('Durée séjour > cible', 'LOS exceeds target (USN>21j, PTA>84j, PNS>112j)', losOutliers.length, episodes.length, false)}
+      ${dqCard('Durée séjour alerte', 'LOS alert (USN>45d, PTA>8wk, PNS>12wk)', losOutliers.length, episodes.length, false)}
       ${dqCard('Visites > 12', 'More than 12 visits before discharge', visitOutliers.length, episodes.length, true)}
       ${dqCard('Sortie manquante / overdue', 'Active but enrolled past target LOS — possible missing discharge', missingDischarge.length, episodes.length, false)}
     </div>
@@ -1475,7 +1730,7 @@ function render() {
   renderEnrollmentTrend(episodes);
   renderCohortOutcomes(episodes);
   renderProgramFlow(episodes);
-  renderSuppGap(_dashData.suppMonthly, filters.range);
+  renderSuppGap(_dashData.suppMonthly, filters.range, episodes);
   renderLOS(episodes);
   renderGeographic(episodes);
   renderOutcomesTable(episodes);
